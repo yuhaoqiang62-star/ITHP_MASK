@@ -70,32 +70,63 @@ def train(
     mae_list = []
     corr_list = []
     f1_list = []
-    ba_list = []  # ✅ 添加BA列表
+    ba_list = []
 
     result_file = get_result_filename()
+    
+    # 记录开始信息
+    start_message = f"Training started at {get_timestamp()}"
+    print(start_message)
+    log_results(result_file, start_message)
+    log_results(result_file, f"Dataset: {args.dataset}, Model: {args.model}, Seed: {args.seed}")
+    log_results(result_file, "=" * 80)
 
     for epoch_i in range(int(args.n_epochs)):
+        # 训练一个epoch
         train_loss = train_epoch(model, train_dataloader, optimizer, scheduler)
+        
+        # 在验证集上评估
         valid_loss = eval_epoch(model, validation_dataloader)
-
-        if epoch_i != args.n_epochs - 1:
-            train_message = f"TRAIN: epoch:{epoch_i + 1}, train_loss:{train_loss}, valid_loss:{valid_loss}"
-            print(train_message)
-            log_results(result_file, train_message)
-        else:
-            # ✅ 修改测试阶段输出，包含BA
-            test_acc, test_mae, test_corr, test_f_score, test_ba = test_score_model(
-                model, test_data_loader
-            )
-            test_message = (
-                f"TEST: train_loss:{train_loss}, valid_loss:{valid_loss}, "
-                f"test_acc:{test_acc}, mae:{test_mae}, corr:{test_corr}, "
-                f"f1_score:{test_f_score}, binary_acc:{test_ba}"  # ✅ 添加BA
-            )
-            print(test_message)
-            log_results(result_file, test_message)
-
-    return train_loss, valid_loss, test_acc, test_mae, test_corr, test_f_score, test_ba  # ✅ 返回BA
+        
+        # 在测试集上评估
+        test_acc, test_mae, test_corr, test_f_score, test_ba = test_score_model(
+            model, test_data_loader
+        )
+        
+        # 保存指标
+        valid_losses.append(valid_loss)
+        test_accuracies.append(test_acc)
+        mae_list.append(test_mae)
+        corr_list.append(test_corr)
+        f1_list.append(test_f_score)
+        ba_list.append(test_ba)
+        
+        # 输出当前epoch的结果
+        test_message = (
+            f"Epoch {epoch_i + 1}/{args.n_epochs} - "
+            f"TRAIN: train_loss:{train_loss:.4f}, valid_loss:{valid_loss:.4f}, "
+            f"TEST: test_acc:{test_acc:.4f}, mae:{test_mae:.4f}, corr:{test_corr:.4f}, "
+            f"f1_score:{test_f_score:.4f}, binary_acc:{test_ba:.4f}"
+        )
+        print(test_message)
+        log_results(result_file, test_message)
+    
+    # 训练结束后输出最佳结果
+    best_epoch = np.argmax(test_accuracies)
+    best_message = (
+        f"\n{'=' * 80}\n"
+        f"Best Results at Epoch {best_epoch + 1}:\n"
+        f"train_loss:{train_loss:.4f}, valid_loss:{valid_losses[best_epoch]:.4f}, "
+        f"test_acc:{test_accuracies[best_epoch]:.4f}, mae:{mae_list[best_epoch]:.4f}, "
+        f"corr:{corr_list[best_epoch]:.4f}, f1_score:{f1_list[best_epoch]:.4f}, "
+        f"binary_acc:{ba_list[best_epoch]:.4f}\n"
+        f"{'=' * 80}"
+    )
+    print(best_message)
+    log_results(result_file, best_message)
+    
+    # 返回最后一个epoch的结果
+    return train_loss, valid_loss, test_acc, test_mae, test_corr, test_f_score, test_ba
 
 
 parser = argparse.ArgumentParser()
@@ -486,7 +517,7 @@ def main():
         num_train_optimization_steps,
     ) = set_up_data_loader()
 
-    model, optimizer, scheduler = prep_for_training(num_train_optimization_steps)
+    model, optimizer, scheduler = prep_for_training(num_train_optimization_steps
 
     train(
         model,
